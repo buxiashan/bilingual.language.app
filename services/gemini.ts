@@ -8,20 +8,25 @@ export const processVideoWithAI = async (
 ): Promise<Subtitle[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  onProgress("Using Gemini to analyze audio and generate bilingual subtitles...");
+  onProgress("Using Gemini to analyze audio and generate exhaustive bilingual subtitles...");
 
   const prompt = `
-    Identify all English spoken parts in this audio.
-    Transcribe them accurately and translate them into Simplified Chinese.
+    TASK: Exhaustive Bilingual Transcription & Translation.
+    1. Listen to the entire audio carefully. 
+    2. Identify EVERY spoken English sentence or phrase. DO NOT skip any parts, even short ones.
+    3. For each segment, provide the exact English transcription.
+    4. Provide a high-quality Simplified Chinese translation for each segment.
+    5. Ensure timestamps are perfectly synchronized with the speech.
+    6. Ensure the output is a continuous timeline. If there is a long silence, skip it, but do not skip any speech.
+
     Output the result as a JSON array of objects with the following structure:
     {
       "index": number,
       "startTime": "HH:MM:SS,mmm",
       "endTime": "HH:MM:SS,mmm",
-      "originalText": "English transcription",
+      "originalText": "Full English transcription",
       "translatedText": "Simplified Chinese translation"
     }
-    Ensure the timestamps are precise and the translation is natural.
   `;
 
   try {
@@ -76,7 +81,6 @@ export const processVideoWithAI = async (
   } catch (error: any) {
     console.error("Gemini Error Detail:", error);
     
-    // Map common AI errors to user-friendly messages
     if (error.message?.includes("fetch")) {
       throw new Error("Network error: Please check your internet connection.");
     }
