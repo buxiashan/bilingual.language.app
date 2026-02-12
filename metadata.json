@@ -1,0 +1,8 @@
+{
+  "name": "Bilingual Subtitle Pro",
+  "description": "Professional video subtitle generator supporting English-Chinese transcription and translation using Gemini AI. Supports video uploads and YouTube URLs.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
