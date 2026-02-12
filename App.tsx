@@ -26,13 +26,20 @@ const App: React.FC = () => {
   });
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [synthesisProgress, setSynthesisProgress] = useState(0);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return [h, m, s].map(v => v.toString().padStart(2, '0')).join(':');
+  };
 
   const extractAudioEfficiently = async (videoUrl: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -102,7 +109,7 @@ const App: React.FC = () => {
           hiddenVideo.pause();
           reject(new Error("Extraction timed out."));
         }
-      }, 300000);
+      }, 600000); // 10 minute max extraction time
     });
   };
 
@@ -119,16 +126,13 @@ const App: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Use MediaRecorder to capture canvas
     const stream = canvas.captureStream(30);
-    // Mix in original audio
     const audioCtx = new AudioContext();
     const source = audioCtx.createMediaElementSource(videoEl);
     const dest = audioCtx.createMediaStreamDestination();
     source.connect(dest);
-    source.connect(audioCtx.destination); // Still audible while rendering
+    source.connect(audioCtx.destination); 
     
-    // Combine video stream and audio stream
     const combinedStream = new MediaStream([
       ...stream.getVideoTracks(),
       ...dest.stream.getAudioTracks()
@@ -155,15 +159,12 @@ const App: React.FC = () => {
         return;
       }
 
-      // Draw video frame
       ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
 
-      // Find current subtitle
       const cur = videoEl.currentTime;
       const sub = subtitles.find(s => cur >= s.startSeconds && cur <= s.endSeconds);
 
       if (sub) {
-        // Subtitle rendering parameters
         const padding = 20;
         const fontSizeEn = canvas.height * 0.04;
         const fontSizeZh = canvas.height * 0.035;
@@ -180,18 +181,16 @@ const App: React.FC = () => {
         const boxX = (canvas.width - boxWidth) / 2;
         const boxY = canvas.height - boxHeight - bottomOffset;
 
-        // Background box
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.beginPath();
         ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 8);
         ctx.fill();
 
-        // English text
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#facc15'; // Yellow-400
+        ctx.fillStyle = '#facc15'; 
         ctx.font = `bold ${fontSizeEn}px Montserrat, sans-serif`;
         ctx.fillText(sub.originalText, canvas.width / 2, boxY + padding + fontSizeEn * 0.8);
 
-        // Chinese text
         ctx.fillStyle = '#ffffff';
         ctx.font = `${fontSizeZh}px "Noto Sans SC", sans-serif`;
         ctx.fillText(sub.translatedText, canvas.width / 2, boxY + padding + fontSizeEn + fontSizeZh);
@@ -216,6 +215,8 @@ const App: React.FC = () => {
       });
       setSubtitles([]);
       setProcessing({ status: 'idle', progress: 0, message: '' });
+      setCurrentTime(0);
+      setDuration(0);
     }
   };
 
@@ -244,6 +245,20 @@ const App: React.FC = () => {
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+      setCurrentTime(time);
     }
   };
 
@@ -369,20 +384,48 @@ const App: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           <section className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl relative aspect-video group">
             {video ? (
-              <div className="relative w-full h-full bg-black">
-                <video
-                  ref={videoRef}
-                  src={video.url}
-                  className="w-full h-full object-contain"
-                  onTimeUpdate={handleTimeUpdate}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                />
-                <SubtitleOverlay subtitles={subtitles} currentTime={currentTime} />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center cursor-pointer" onClick={togglePlay}>
-                  <button className="p-6 rounded-full bg-yellow-400 text-slate-950 opacity-0 group-hover:opacity-100 transform scale-90 group-hover:scale-100 transition-all shadow-xl">
-                    {isPlaying ? <PauseIcon className="w-8 h-8" /> : <PlayIcon className="w-8 h-8 pl-1" />}
+              <div className="relative w-full h-full bg-black flex flex-col">
+                <div className="relative flex-1 overflow-hidden" onClick={togglePlay}>
+                  <video
+                    ref={videoRef}
+                    src={video.url}
+                    className="w-full h-full object-contain"
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                  />
+                  <SubtitleOverlay subtitles={subtitles} currentTime={currentTime} />
+                  
+                  {/* Play/Pause Overlay */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center cursor-pointer">
+                    <button className="p-6 rounded-full bg-yellow-400 text-slate-950 opacity-0 group-hover:opacity-100 transform scale-90 group-hover:scale-100 transition-all shadow-xl">
+                      {isPlaying ? <PauseIcon className="w-8 h-8" /> : <PlayIcon className="w-8 h-8 pl-1" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Interactive Controls Bar */}
+                <div className="bg-slate-900 border-t border-slate-800 p-3 flex items-center gap-4">
+                  <button onClick={togglePlay} className="text-yellow-400 hover:text-yellow-300">
+                    {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
                   </button>
+                  
+                  <div className="flex-1 flex flex-col gap-1">
+                    <input 
+                      type="range"
+                      min="0"
+                      max={duration || 0}
+                      step="0.01"
+                      value={currentTime}
+                      onChange={handleSeek}
+                      className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-400"
+                    />
+                    <div className="flex justify-between text-[10px] font-mono text-slate-500">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{formatTime(duration)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (

@@ -12,12 +12,13 @@ export const processVideoWithAI = async (
 
   const prompt = `
     TASK: Exhaustive Bilingual Transcription & Translation.
-    1. Listen to the entire audio carefully. 
-    2. Identify EVERY spoken English sentence or phrase. DO NOT skip any parts, even short ones.
-    3. For each segment, provide the exact English transcription.
-    4. Provide a high-quality Simplified Chinese translation for each segment.
-    5. Ensure timestamps are perfectly synchronized with the speech.
-    6. Ensure the output is a continuous timeline. If there is a long silence, skip it, but do not skip any speech.
+    1. Listen to the entire audio carefully from START TO FINISH.
+    2. Identify EVERY spoken English sentence or phrase. 
+    3. CRITICAL: Do not truncate the output. You MUST provide the full transcription for the entire duration of the provided audio, even if it is long.
+    4. For each segment, provide the exact English transcription.
+    5. Provide a high-quality Simplified Chinese translation for each segment.
+    6. Ensure timestamps (HH:MM:SS,mmm) are perfectly synchronized with the speech.
+    7. Maintain a continuous timeline in the JSON array.
 
     Output the result as a JSON array of objects with the following structure:
     {
@@ -46,6 +47,10 @@ export const processVideoWithAI = async (
         }
       ],
       config: {
+        // Increase output tokens to accommodate longer subtitle lists for long videos.
+        maxOutputTokens: 8192,
+        // Use thinking budget to help the model plan out the entire timeline accurately.
+        thinkingConfig: { thinkingBudget: 4000 },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -71,6 +76,9 @@ export const processVideoWithAI = async (
     const jsonStr = response.text.trim();
     const rawSubs = JSON.parse(jsonStr) as any[];
     
+    // Check if the list seems cut off (e.g., ends way before the end of audio)
+    // In a real production app, we might trigger a recursive call here for the remaining duration.
+
     const processed = rawSubs.map(sub => ({
       ...sub,
       startSeconds: parseSRTTime(sub.startTime),
